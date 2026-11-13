@@ -1,0 +1,15 @@
+data,produto,quantidade,preco_unitario
+2025-03-01,Camiseta Básica,3,49.90
+2025-03-01,Calça Jeans,1,159.90
+2025-03-02,Tênis Esportivo,1,299.00
+2025-03-02,Camiseta Básica,5,49.90
+2025-03-03,Boné,4,35.00
+2025-03-03,Meia Esportiva,10,12.50
+2025-03-04,Jaqueta,1,249.90
+2025-03-04,Camiseta Básica,2,49.90
+2025-03-05,Calça Jeans,2,159.90
+2025-03-05,Boné,3,35.00
+2025-03-06,Tênis Esportivo,2,299.00
+2025-03-06,Meia Esportiva,8,12.50
+2025-03-07,Camiseta Básica,4,49.90
+2025-03-07,Jaqueta,2,249.90

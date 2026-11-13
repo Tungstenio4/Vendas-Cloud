@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise de Vendas na Nuvem</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --txt: #1d2330; --muted: #667085;
+    --accent: #1a73e8; --ok: #188038; --err: #c5221f; --line: #e3e6eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171c; --card: #1e232b; --txt: #e8eaed; --muted: #9aa3b2;
+            --accent: #6ea8fe; --ok: #5bd18b; --err: #ff8a80; --line: #2c333d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--txt); }
+  header { padding: 20px 24px; border-bottom: 1px solid var(--line); background: var(--card); }
+  header h1 { margin: 0; font-size: 1.3rem; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+  main { max-width: 1000px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  h2 { margin: 0 0 12px; font-size: 1.05rem; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input[type=file], input[type=password], select { padding: 8px; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--bg); color: var(--txt); max-width: 100%; }
+  button { padding: 9px 16px; border: 0; border-radius: 6px; background: var(--accent);
+    color: #fff; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .msg { margin-top: 10px; font-size: .92rem; }
+  .msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .kpi { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .kpi small { color: var(--muted); display: block; }
+  .kpi strong { font-size: 1.35rem; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr 90px; gap: 10px; align-items: center;
+    margin: 8px 0; font-size: .92rem; }
+  .bar-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar { background: var(--line); border-radius: 4px; height: 16px; overflow: hidden; }
+  .bar > div { background: var(--accent); height: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .scroll { max-height: 260px; overflow-y: auto; }
+  ul.erros { margin: 0; padding-left: 18px; color: var(--err); font-size: .88rem; }
+  #resultado { display: grid; gap: 16px; }
+  .hidden { display: none !important; }
+  @media (max-width: 560px) { .bar-row { grid-template-columns: 100px 1fr 70px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Análise de Vendas na Nuvem</h1>
+  <p>Envie CSVs de vendas (data, produto, quantidade, preco_unitario) e veja os indicadores.</p>
+</header>
+
+<main>
+  <section>
+    <h2>1. Enviar arquivo</h2>
+    <div class="row">
+      <input type="file" id="arquivo" accept=".csv">
+      <input type="password" id="chave" placeholder="Chave de API (se exigida)">
+      <button id="btnEnviar">Enviar e processar</button>
+    </div>
+    <div id="msgUpload" class="msg"></div>
+  </section>
+
+  <section>
+    <h2>2. Relatório</h2>
+    <div class="row">
+      <label for="seletor">Origem dos dados:</label>
+      <select id="seletor"><option value="">Todos os arquivos (consolidado)</option></select>
+      <button id="btnAtualizar">Atualizar</button>
+    </div>
+    <div id="msgRelatorio" class="msg"></div>
+  </section>
+
+  <div id="resultado" class="hidden">
+    <section>
+      <h2>Indicadores</h2>
+      <div class="kpis">
+        <div class="kpi"><small>Total de vendas</small><strong id="kTotal">-</strong></div>
+        <div class="kpi"><small>Itens vendidos</small><strong id="kItens">-</strong></div>
+        <div class="kpi"><small>Ticket médio</small><strong id="kTicket">-</strong></div>
+        <div class="kpi"><small>Registros válidos / inválidos</small><strong id="kRegs">-</strong></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Produtos mais vendidos (por quantidade)</h2>
+      <div id="top"></div>
+    </section>
+
+    <section>
+      <h2>Vendas por dia</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Data</th><th>Total</th></tr></thead>
+        <tbody id="dias"></tbody>
+      </table></div>
+    </section>
+
+    <section id="blocoErros" class="hidden">
+      <h2>Linhas rejeitadas</h2>
+      <ul class="erros" id="erros"></ul>
+    </section>
+  </div>
+
+  <section>
+    <h2>Arquivos armazenados no Cloud Storage</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Nome</th><th>Tamanho</th><th>Enviado em</th></tr></thead>
+      <tbody id="arquivos"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const moeda = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function mostrar(el, texto, tipo) {
+  el.textContent = texto;
+  el.className = "msg " + (tipo || "");
+}
+
+function detalheErro(corpo) {
+  const d = corpo && corpo.detail;
+  if (!d) return "Erro desconhecido.";
+  if (typeof d === "string") return d;
+  const linhas = (d.erros || []).slice(0, 3)
+    .map((e) => `linha ${e.linha}: ${e.motivo}`).join("; ");
+  return (d.mensagem || "Erro de validação.") + (linhas ? " (" + linhas + ")" : "");
+}
+
+async function carregarArquivos() {
+  const resp = await fetch("/api/arquivos");
+  const { arquivos } = await resp.json();
+
+  const corpo = $("arquivos");
+  corpo.replaceChildren();
+  const seletor = $("seletor");
+  const atual = seletor.value;
+  seletor.replaceChildren(new Option("Todos os arquivos (consolidado)", ""));
+
+  for (const a of arquivos) {
+    const tr = document.createElement("tr");
+    for (const texto of [a.nome, (a.tamanho / 1024).toFixed(1) + " KB",
+                         a.atualizado ? new Date(a.atualizado).toLocaleString("pt-BR") : "-"]) {
+      const td = document.createElement("td");
+      td.textContent = texto;
+      tr.appendChild(td);
+    }
+    corpo.appendChild(tr);
+    seletor.appendChild(new Option(a.nome, a.nome));
+  }
+  if ([...seletor.options].some((o) => o.value === atual)) seletor.value = atual;
+}
+
+function desenhar(r) {
+  $("resultado").classList.remove("hidden");
+  $("kTotal").textContent = moeda(r.total_vendas);
+  $("kItens").textContent = r.total_itens;
+  $("kTicket").textContent = moeda(r.ticket_medio);
+  $("kRegs").textContent = `${r.registros_validos} / ${r.registros_invalidos}`;
+
+  const top = $("top");
+  top.replaceChildren();
+  const maximo = Math.max(...r.top_produtos.map((p) => p.quantidade), 1);
+  for (const p of r.top_produtos) {
+    const linha = document.createElement("div");
+    linha.className = "bar-row";
+    const nome = document.createElement("div");
+    nome.className = "name"; nome.textContent = p.produto; nome.title = p.produto;
+    const barra = document.createElement("div");
+    barra.className = "bar";
+    const preenchido = document.createElement("div");
+    preenchido.style.width = (p.quantidade / maximo * 100) + "%";
+    barra.appendChild(preenchido);
+    const qtd = document.createElement("div");
+    qtd.textContent = p.quantidade + " un.";
+    linha.append(nome, barra, qtd);
+    top.appendChild(linha);
+  }
+
+  const dias = $("dias");
+  dias.replaceChildren();
+  for (const d of r.vendas_por_dia) {
+    const tr = document.createElement("tr");
+    const c1 = document.createElement("td"); c1.textContent = d.data.split("-").reverse().join("/");
+    const c2 = document.createElement("td"); c2.textContent = moeda(d.total);
+    tr.append(c1, c2);
+    dias.appendChild(tr);
+  }
+
+  const lista = $("erros");
+  lista.replaceChildren();
+  $("blocoErros").classList.toggle("hidden", r.erros.length === 0);
+  for (const e of r.erros) {
+    const li = document.createElement("li");
+    li.textContent = `${e.arquivo} - linha ${e.linha}: ${e.motivo}`;
+    lista.appendChild(li);
+  }
+}
+
+async function carregarRelatorio() {
+  const nome = $("seletor").value;
+  const url = "/api/relatorio" + (nome ? "?arquivo=" + encodeURIComponent(nome) : "");
+  mostrar($("msgRelatorio"), "Processando na nuvem...");
+  try {
+    const resp = await fetch(url);
+    const corpo = await resp.json();
+    if (!resp.ok) {
+      $("resultado").classList.add("hidden");
+      return mostrar($("msgRelatorio"), detalheErro(corpo), "err");
+    }
+    desenhar(corpo);
+    mostrar($("msgRelatorio"), "Relatório atualizado.", "ok");
+  } catch (e) {
+    mostrar($("msgRelatorio"), "Falha de comunicação com o servidor.", "err");
+  }
+}
+
+async function enviar() {
+  const arquivo = $("arquivo").files[0];
+  if (!arquivo) return mostrar($("msgUpload"), "Escolha um arquivo .csv primeiro.", "err");
+
+  const dados = new FormData();
+  dados.append("arquivo", arquivo);
+  const cabecalhos = {};
+  if ($("chave").value) cabecalhos["X-API-Key"] = $("chave").value;
+
+  $("btnEnviar").disabled = true;
+  mostrar($("msgUpload"), "Enviando...");
+  try {
+    const resp = await fetch("/api/upload", { method: "POST", body: dados, headers: cabecalhos });
+    const corpo = await resp.json();
+    if (!resp.ok) {
+      mostrar($("msgUpload"), detalheErro(corpo), "err");
+    } else {
+      mostrar($("msgUpload"), "Salvo no Cloud Storage como " + corpo.arquivo, "ok");
+      await carregarArquivos();
+      $("seletor").value = corpo.arquivo;
+      desenhar(corpo.relatorio);
+    }
+  } catch (e) {
+    mostrar($("msgUpload"), "Falha de comunicação com o servidor.", "err");
+  } finally {
+    $("btnEnviar").disabled = false;
+  }
+}
+
+$("btnEnviar").addEventListener("click", enviar);
+$("btnAtualizar").addEventListener("click", carregarRelatorio);
+$("seletor").addEventListener("change", carregarRelatorio);
+carregarArquivos().then(() => {
+  if ($("seletor").options.length > 1) carregarRelatorio();
+});
+</script>
+</body>
+</html>
